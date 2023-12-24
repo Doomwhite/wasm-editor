@@ -10,68 +10,31 @@ WebAssembly
 			memory,
 			malloc,
 			acumular,
-			filtro_preto_e_branco
+			filtro_preto_e_branco,
+			filtro_vermelho,
+			filtro_verde,
+			filtro_azul,
+			filtro_opacidade,
+			filtro_inversao
 		} = instance.exports;
 
-		botaoPBFiltroWasm.addEventListener('click', (event) => {
-			// Seleciona a imagem
-			const imagem = document.getElementById('imagem');
-
-			// Converte a imagem para canvas
-			const { canvas, contexto } = converteImagemParaCanvas(imagem);
-
-			// Dados da imagem (objeto com tipo ImageData)
-			const dadosDaImagem = contexto.getImageData(
-				0, 0, canvas.width, canvas.height);
-
-			// Desta vez, usamos "buffer" em vez de "data" para
-			// poder montar a matriz tipada da imagem
-			const buffer = dadosDaImagem.data.buffer;
-
-			// Matriz tipada de u8 (0 a 255)
-			const u8Array = new Uint8Array(buffer);
-
-			// Realiza o malloc matriz tipada
-			const ponteiro = malloc(u8Array.length);
-
-			// Cria matriz tipada a partir da visualização da memória
-			// da instância, ponteiro e comprimento (u8Array.length)
-			let wasmArray = new Uint8ClampedArray(
-				instance.exports.memory.buffer,
-				ponteiro,
-				u8Array.length
-			);
-
-			// O valor de wasmArray se torna o mesmo da nossa imagem
-			wasmArray.set(u8Array);
-
-			// Salva o tempo do início da operação
-			const inicio = performance.now();
-
-			// Aplica filtro na imagem que está salva na memória
-			filtro_preto_e_branco(ponteiro, u8Array.length);
-
-			// Salva o tempo do final da operação
-			const final = performance.now();
-
-			// Computa tempo da operação
-			tempoDaOperacao(inicio, final, 'WebAssembly Preto e Branco');
-
-			// Pega altura e largura da imagem
-			const width = imagem.naturalWidth || imagem.width;
-			const height = imagem.naturalHeight || imagem.height;
-
-			// Cria dados da imagem (ImageData) usando largura e altura
-			const novoDadosDaImagem = contexto.createImageData(width, height);
-
-			// Preenche os dados com a matriz tipada
-			novoDadosDaImagem.data.set(wasmArray);
-
-			// Atualiza o canvas com a nova imagem
-			contexto.putImageData(novoDadosDaImagem, 0, 0);
-
-			// Atualiza o atributo src como o base64 do canvas
-			imagem.src = canvas.toDataURL('image/jpeg');
+		adicionarFiltro('Preto e Branco WASM', '#preto-e-branco-wasm', {
+			instance, filtro: filtro_preto_e_branco
+		});
+		adicionarFiltro('Vermelho WASM', '#vermelho-wasm', {
+			instance, filtro: filtro_vermelho
+		});
+		adicionarFiltro('Azul WASM', '#azul-wasm', {
+			instance, filtro: filtro_azul
+		});
+		adicionarFiltro('Verde WASM', '#verde-wasm', {
+			instance, filtro: filtro_verde
+		});
+		adicionarFiltro('Opacidade WASM', '#opacidade-wasm', {
+			instance, filtro: filtro_opacidade
+		});
+		adicionarFiltro('Inversão WASM', '#inversao-wasm', {
+			instance, filtro: filtro_inversao
 		});
 
 		criar_memoria_inicial();
@@ -91,6 +54,7 @@ WebAssembly
 		const somaEntreItensDaLista = acumular(wasmListaPonteiro, comprimento);
 		console.log(somaEntreItensDaLista); // 150
 	});
+
 
 const input = document.querySelector('input');
 
@@ -204,3 +168,42 @@ function tempoDaOperacao(inicio, fim, nomeDaOperacao) {
 	// Muda o texto de #performance para o tempo da execução
 	performance.textContent = `${nomeDaOperacao}: ${fim - inicio} ms.`;
 }
+
+function adicionarFiltro(text, selector, { instance, filtro }) {
+	const button = document.querySelector(selector);
+	const imagem = document.getElementById('imagem');
+	button.addEventListener('click', () => {
+		executarFiltro(imagem, (canvas, context) => {
+			const image = document.getElementById("imagem");
+			const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+			const buffer = imageData.data.buffer;
+			const u8Array = new Uint8Array(buffer);
+			let wasmClampedPtr = instance.exports.malloc(u8Array.length);
+			let wasmClampedArray = new Uint8ClampedArray(instance.exports.memory.buffer, wasmClampedPtr, u8Array.length);
+			wasmClampedArray.set(u8Array);
+			const startTime = performance.now();
+			filtro(wasmClampedPtr, u8Array.length);
+			const endTime = performance.now();
+			tempoDaOperacao(startTime, endTime, text);
+			const width = image.naturalWidth || image.width;
+			const height = image.naturalHeight || image.height;
+			const newImageData = context.createImageData(width, height);
+			newImageData.data.set(wasmClampedArray);
+			context.putImageData(newImageData, 0, 0);
+			image.src = canvas.toDataURL('image/jpeg');
+		});
+	});
+}
+
+function executarFiltro(image, processImageFn) {
+	const { canvas } = converteImagemParaCanvas(image);
+	if (!processImageFn) {
+		return canvas.toDataURL();
+	}
+
+	if (typeof processImageFn === 'function') {
+		processImageFn(canvas, canvas.getContext('2d'));
+		return canvas.toDataURL('image/jpeg');
+	}
+}
+
